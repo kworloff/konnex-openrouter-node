@@ -24,6 +24,9 @@ source .venv/bin/activate
 echo "[3/5] pip"
 pip install --upgrade pip wheel
 pip install -r requirements.txt
+# Resolve scalecodec <-> cyscale namespace conflict in newer bittensor stacks
+pip uninstall -y scalecodec cyscale >/dev/null 2>&1 || true
+pip install --force-reinstall --quiet cyscale
 
 echo "[4/5] .env"
 if [[ ! -f .env ]]; then
