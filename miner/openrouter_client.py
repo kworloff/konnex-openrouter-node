@@ -1,5 +1,10 @@
 """Async OpenRouter client. Mirrors the 3-candidate competition logic of the original miner,
-but runs the candidates concurrently and shares one HTTP session across all wallets."""
+but runs the candidates concurrently and shares one HTTP session across all wallets.
+
+Uses httpx instead of aiohttp because bittensor's axon (uvicorn) runs request handlers in
+a separate event loop from the one we set up at startup — aiohttp.ClientSession is loop-bound
+and would raise "Timeout context manager should be used inside a task". httpx is loop-agnostic.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +13,7 @@ import logging
 import os
 import typing
 
-import aiohttp
+import httpx
 
 from miner.policy_io import (
     canonicalize_exit_action_id,
@@ -78,19 +83,35 @@ class OpenRouterClient:
         self._base_url = base_url.rstrip("/")
         self._http_referer = http_referer
         self._x_title = x_title
-        self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self._semaphore = asyncio.Semaphore(concurrency)
-        self._session: aiohttp.ClientSession | None = None
+        self._timeout_seconds = timeout_seconds
+        self._concurrency = concurrency
+        self._semaphore: asyncio.Semaphore | None = None
+        self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "OpenRouterClient":
-        connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=300)
-        self._session = aiohttp.ClientSession(connector=connector, timeout=self._timeout)
+        limits = httpx.Limits(
+            max_connections=max(self._concurrency * 2, 100),
+            max_keepalive_connections=max(self._concurrency, 50),
+        )
+        self._client = httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=httpx.Timeout(self._timeout_seconds),
+            limits=limits,
+            headers=self._headers(),
+        )
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        if self._session:
-            await self._session.close()
-            self._session = None
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    def _get_semaphore(self) -> asyncio.Semaphore:
+        # Lazily create the semaphore in the event loop that actually uses it
+        # (axon worker loop, not the startup loop).
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self._concurrency)
+        return self._semaphore
 
     def _headers(self) -> dict[str, str]:
         h = {
@@ -112,7 +133,7 @@ class OpenRouterClient:
         temperature: float,
     ) -> dict[str, typing.Any]:
         ins = normalize_user_instruction(instruction)
-        if not self._api_key or self._session is None:
+        if not self._api_key or self._client is None:
             return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:no_key")
         sys_prompt = (
             "You are an OpenFly drone policy miner. Return strict JSON object only with keys: "
@@ -148,18 +169,17 @@ class OpenRouterClient:
             "response_format": {"type": "json_object"},
             "messages": messages,
         }
-        url = f"{self._base_url}/chat/completions"
+        sem = self._get_semaphore()
         try:
-            async with self._semaphore:
-                async with self._session.post(url, headers=self._headers(), json=body) as resp:
-                    if resp.status >= 400:
-                        text = await resp.text()
-                        log.warning("openrouter %s: %s", resp.status, text[:300])
-                        return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:http{resp.status}")
-                    payload = await resp.json()
+            async with sem:
+                resp = await self._client.post("/chat/completions", json=body)
+            if resp.status_code >= 400:
+                log.warning("openrouter %s: %s", resp.status_code, resp.text[:300])
+                return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:http{resp.status_code}")
+            payload = resp.json()
             raw = (payload.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
             obj = _parse_json_loose(raw)
-        except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError, ValueError) as e:
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as e:
             log.warning("openrouter candidate failed: %s: %s", type(e).__name__, e)
             return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:exc")
 
@@ -230,7 +250,6 @@ def _parse_json_loose(raw: str) -> dict[str, typing.Any]:
         return obj if isinstance(obj, dict) else {}
     except json.JSONDecodeError:
         pass
-    # Some models wrap JSON in ```json fences or add prose
     start = raw.find("{")
     end = raw.rfind("}")
     if start >= 0 and end > start:
