@@ -21,6 +21,24 @@
 
 set -euo pipefail
 
+print_banner() {
+  printf '\n\033[1;36m'
+  cat <<'BANNER'
+╔════════════════════════════════════╗
+║                                    ║
+║    __ __                           ║
+║   / //_/___  ____  ____  ___  _  __║
+║  / ,< / __ \/ __ \/ __ \/ _ \| |/_/║
+║ / /| / /_/ / / / / / / /  __/>  <  ║
+║/_/ |_\____/_/ /_/_/ /_/\___/_/|_|  ║
+║                                    ║
+╚════════════════════════════════════╝
+                              by 0xKwo
+BANNER
+  printf '\033[0m\n'
+}
+print_banner
+
 # --- defaults ---
 : "${KONNEX_REPO_URL:=https://github.com/kworloff/konnex-openrouter-node.git}"
 : "${KONNEX_BRANCH:=main}"
