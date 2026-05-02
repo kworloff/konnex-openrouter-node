@@ -74,11 +74,15 @@ def _btcli_register(name: str, hotkey: str, wallets_dir: Path, netuid: int, endp
         return False
     combined = (r.stdout or "") + "\n" + (r.stderr or "")
     if "Custom error: 6" in combined:
-        # In Konnex's forked subtensor, "Custom error: 6" can mean either
-        # "already registered" or "cannot pay burn fee". Don't trust it —
-        # let the on-chain re-check decide.
-        log.warning("btcli returned 'Custom error: 6' — will verify via on-chain check")
-        return True
+        # In Konnex's forked subtensor, "Custom error: 6" = registration
+        # rate-limited (target_regs_per_interval reached). Need to wait for
+        # the next adjustment_interval window (~72 min on default subnet config).
+        log.warning(
+            "btcli register: rate-limited by chain (Custom error: 6). "
+            "Subnet only accepts ~1 registration per adjustment_interval (~72 min). "
+            "Skipping for now — re-run bootstrap later to retry."
+        )
+        return False
     if "Insufficient balance" in combined or "InsufficientBalance" in combined:
         log.error("btcli register: insufficient balance on coldkey")
         return False
