@@ -122,25 +122,75 @@ if [[ -z "$EXTERNAL_IP" ]]; then
 fi
 
 # --- 5. mnemonics ---
+MNEMONICS_FILE="$KONNEX_INSTALL_DIR/mnemonics.txt"
+count_mnemonics() {
+  [[ -f "$MNEMONICS_FILE" ]] && grep -cvE '^\s*(#|$)' "$MNEMONICS_FILE" 2>/dev/null || echo 0
+}
+
 log "Mnemonics (one per line — each line = 1 wallet)"
 if [[ -n "${MNEMONICS_PATH:-}" && -f "$MNEMONICS_PATH" ]]; then
-  cp "$MNEMONICS_PATH" "$KONNEX_INSTALL_DIR/mnemonics.txt"
-  chmod 600 "$KONNEX_INSTALL_DIR/mnemonics.txt"
+  cp "$MNEMONICS_PATH" "$MNEMONICS_FILE"
+  chmod 600 "$MNEMONICS_FILE"
   echo "Copied $MNEMONICS_PATH -> mnemonics.txt"
-elif [[ -f "$KONNEX_INSTALL_DIR/mnemonics.txt" ]]; then
-  echo "Using existing mnemonics.txt"
+elif [[ -s "$MNEMONICS_FILE" ]] && [[ "$(count_mnemonics)" -gt 0 ]]; then
+  echo "Using existing mnemonics.txt ($(count_mnemonics) wallets)"
 else
-  echo "mnemonics.txt is missing."
-  echo "Upload it now (e.g. via scp) to: $KONNEX_INSTALL_DIR/mnemonics.txt"
-  echo "Or set MNEMONICS_PATH=/path/to/file and rerun this script."
-  reply="$(ask "Continue without mnemonics? bootstrap will be skipped" "no")"
-  if [[ "$reply" != "yes" ]]; then exit 1; fi
+  # create empty file with a header for the user
+  if [[ ! -f "$MNEMONICS_FILE" ]]; then
+    cat > "$MNEMONICS_FILE" <<'EOF'
+# Paste BIP-39 mnemonics here, ONE per line. Each line = 1 wallet.
+# Lines starting with # are ignored. Save and exit when done.
+# Each mnemonic must be 12, 15, 18, 21, or 24 words.
+
+EOF
+    chmod 600 "$MNEMONICS_FILE"
+  fi
+
+  echo
+  echo "How would you like to provide mnemonics?"
+  echo "  1) Open editor now and paste them here  (recommended for <100 wallets)"
+  echo "  2) I'll upload mnemonics.txt via scp from another terminal, then continue"
+  echo "  3) Skip — I'll bootstrap wallets manually later"
+  choice="$(ask "Choose 1/2/3" "1")"
+
+  case "$choice" in
+    1)
+      EDITOR_BIN="${EDITOR:-}"
+      if [[ -z "$EDITOR_BIN" ]]; then
+        for c in nano vim vi; do
+          if command -v "$c" >/dev/null 2>&1; then EDITOR_BIN="$c"; break; fi
+        done
+      fi
+      if [[ -z "$EDITOR_BIN" ]]; then
+        $SUDO apt-get install -y --no-install-recommends nano >/dev/null
+        EDITOR_BIN="nano"
+      fi
+      echo "Opening $EDITOR_BIN $MNEMONICS_FILE — paste your mnemonics, save & exit."
+      sleep 1
+      "$EDITOR_BIN" "$MNEMONICS_FILE" </dev/tty >/dev/tty 2>&1 || true
+      ;;
+    2)
+      echo
+      echo "From your local machine, run (in a NEW terminal):"
+      echo "  scp /path/to/mnemonics.txt root@$(hostname -I | awk '{print $1}'):$MNEMONICS_FILE"
+      echo
+      while true; do
+        read -r -p "Press Enter when upload is complete (or type 'skip'): " reply </dev/tty || true
+        if [[ "$reply" == "skip" ]]; then break; fi
+        if [[ "$(count_mnemonics)" -gt 0 ]]; then break; fi
+        echo "  mnemonics.txt is still empty. Try again or type 'skip'."
+      done
+      ;;
+    3)
+      echo "Skipping — fill $MNEMONICS_FILE later, then run: cd $KONNEX_INSTALL_DIR && ./run.sh bootstrap"
+      ;;
+    *)
+      err "invalid choice"; exit 1
+      ;;
+  esac
 fi
 
-WALLET_COUNT=0
-if [[ -f "$KONNEX_INSTALL_DIR/mnemonics.txt" ]]; then
-  WALLET_COUNT="$(grep -cvE '^\s*(#|$)' "$KONNEX_INSTALL_DIR/mnemonics.txt" || true)"
-fi
+WALLET_COUNT="$(count_mnemonics)"
 echo "Wallet count: $WALLET_COUNT"
 
 # --- 6. .env ---
