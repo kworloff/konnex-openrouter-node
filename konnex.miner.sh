@@ -73,8 +73,9 @@ ask() {
 
 # --- 1. system deps ---
 log "Installing system packages"
+export DEBIAN_FRONTEND=noninteractive
 $SUDO apt-get update -y
-$SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+$SUDO apt-get install -y --no-install-recommends \
   python3.11 python3.11-venv python3.11-dev \
   build-essential pkg-config libssl-dev curl git ca-certificates jq ufw
 
