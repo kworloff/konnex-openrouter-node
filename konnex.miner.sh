@@ -98,9 +98,6 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip wheel >/dev/null
 pip install -r requirements.txt
-# Resolve scalecodec <-> cyscale namespace conflict in newer bittensor stacks
-pip uninstall -y scalecodec cyscale >/dev/null 2>&1 || true
-pip install --force-reinstall --quiet cyscale
 
 # --- 4. interactive config (only ask for things not in env) ---
 log "Configuration"
