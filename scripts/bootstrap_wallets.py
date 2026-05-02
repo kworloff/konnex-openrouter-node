@@ -79,8 +79,9 @@ def _btcli_register(name: str, hotkey: str, wallets_dir: Path, netuid: int, endp
         # the next adjustment_interval window (~72 min on default subnet config).
         log.warning(
             "btcli register: rate-limited by chain (Custom error: 6). "
-            "Subnet only accepts ~1 registration per adjustment_interval (~72 min). "
-            "Skipping for now — re-run bootstrap later to retry."
+            "Empirically Konnex testnet allows ~3 registrations in a short burst, "
+            "then forces a cooldown of ~20-30 min before accepting more. "
+            "Skipping for now — re-run bootstrap later to pick up the rest."
         )
         return False
     if "Insufficient balance" in combined or "InsufficientBalance" in combined:
