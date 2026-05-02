@@ -91,7 +91,7 @@ if [[ -z "$OPENROUTER_API_KEY" ]]; then
 fi
 
 if [[ -z "${NETUID:-}" ]]; then
-  NETUID="$(ask "NETUID" "1")"
+  NETUID="$(ask "NETUID" "4")"
 fi
 
 if [[ -z "${EXTERNAL_IP:-}" ]]; then
