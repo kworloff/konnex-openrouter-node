@@ -5,7 +5,9 @@ across all of them. Each hotkey gets its own bt.axon bound to a distinct port (A
 all of them attach the same forward/blacklist/priority handlers — those only depend on the shared
 metagraph, not on which axon received the request.
 """
-from __future__ import annotations
+# NOTE: do NOT add `from __future__ import annotations` here — bittensor's axon.attach()
+# inspects the forward function's annotations at runtime via issubclass(), which fails
+# when annotations are lazy strings.
 
 import asyncio
 import json
@@ -60,9 +62,9 @@ class MultiWalletMiner:
         self.allow_non_registered = allow_non_registered
         self.force_validator_permit = force_validator_permit
 
-        self.subtensor: bt.subtensor | None = None
-        self.metagraph: bt.metagraph | None = None
-        self.axons: list[bt.axon] = []
+        self.subtensor: typing.Any = None
+        self.metagraph: typing.Any = None
+        self.axons: list[typing.Any] = []
         self._stop = asyncio.Event()
 
     def _load_manifest(self) -> list[dict[str, typing.Any]]:
@@ -145,7 +147,7 @@ class MultiWalletMiner:
         except Exception:
             return 0.0
 
-    def _build_axon(self, wallet: bt.wallet, port: int) -> bt.axon:
+    def _build_axon(self, wallet: typing.Any, port: int) -> typing.Any:
         axon = bt.axon(wallet=wallet, port=port, ip=self.external_ip or None)
         axon.attach(
             forward_fn=self._forward,
