@@ -72,8 +72,12 @@ def _btcli_register(name: str, hotkey: str, wallets_dir: Path, netuid: int, endp
     except subprocess.TimeoutExpired:
         log.error("btcli register timed out for %s/%s", name, hotkey)
         return False
+    combined = (r.stdout or "") + "\n" + (r.stderr or "")
+    if "Custom error: 6" in combined or "AlreadyRegistered" in combined:
+        log.info("hotkey already registered on chain (custom error 6) — treating as success")
+        return True
     if r.returncode != 0:
-        log.error("btcli register failed (rc=%d): %s", r.returncode, (r.stderr or r.stdout)[-500:])
+        log.error("btcli register failed (rc=%d): %s", r.returncode, combined[-500:])
         return False
     return True
 
