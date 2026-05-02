@@ -85,29 +85,40 @@ class OpenRouterClient:
         self._x_title = x_title
         self._timeout_seconds = timeout_seconds
         self._concurrency = concurrency
-        self._client: httpx.AsyncClient | None = None
+        # Per-event-loop httpx clients. bittensor's axons run uvicorn in separate
+        # event loops; httpx.AsyncClient holds asyncio primitives (locks/events)
+        # bound to the loop in which it was created, so a single shared client
+        # raises "bound to a different event loop" when used from another axon.
+        # We lazily create one client per loop.
+        self._clients: dict[int, httpx.AsyncClient] = {}
 
     async def __aenter__(self) -> "OpenRouterClient":
-        # Concurrency cap is enforced by httpx's connection-pool (max_connections).
-        # We don't use an asyncio.Semaphore here because bittensor's axons run in
-        # separate event loops — a Semaphore bound to one loop can't be awaited
-        # from another.
-        limits = httpx.Limits(
-            max_connections=self._concurrency,
-            max_keepalive_connections=max(self._concurrency // 2, 50),
-        )
-        self._client = httpx.AsyncClient(
-            base_url=self._base_url,
-            timeout=httpx.Timeout(self._timeout_seconds),
-            limits=limits,
-            headers=self._headers(),
-        )
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        for client in list(self._clients.values()):
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+        self._clients.clear()
+
+    def _get_client(self) -> httpx.AsyncClient:
+        loop = asyncio.get_running_loop()
+        client = self._clients.get(id(loop))
+        if client is None:
+            limits = httpx.Limits(
+                max_connections=self._concurrency,
+                max_keepalive_connections=max(self._concurrency // 2, 50),
+            )
+            client = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=httpx.Timeout(self._timeout_seconds),
+                limits=limits,
+                headers=self._headers(),
+            )
+            self._clients[id(loop)] = client
+        return client
 
     def _headers(self) -> dict[str, str]:
         h = {
@@ -129,7 +140,7 @@ class OpenRouterClient:
         temperature: float,
     ) -> dict[str, typing.Any]:
         ins = normalize_user_instruction(instruction)
-        if not self._api_key or self._client is None:
+        if not self._api_key:
             return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:no_key")
         sys_prompt = (
             "You are an OpenFly drone policy miner. Return strict JSON object only with keys: "
@@ -166,7 +177,7 @@ class OpenRouterClient:
             "messages": messages,
         }
         try:
-            resp = await self._client.post("/chat/completions", json=body)
+            resp = await self._get_client().post("/chat/completions", json=body)
             if resp.status_code >= 400:
                 log.warning("openrouter %s: %s", resp.status_code, resp.text[:300])
                 return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:http{resp.status_code}")
