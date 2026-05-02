@@ -119,7 +119,7 @@ class MultiWalletMiner:
         )
         return synapse
 
-    async def _blacklist(self, synapse: DroneNavSynapse) -> tuple[bool, str]:
+    async def _blacklist(self, synapse: DroneNavSynapse) -> typing.Tuple[bool, str]:
         if synapse.dendrite is None or synapse.dendrite.hotkey is None:
             return True, "Missing dendrite or hotkey"
         assert self.metagraph is not None
