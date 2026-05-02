@@ -64,6 +64,7 @@ def _btcli_register(name: str, hotkey: str, wallets_dir: Path, netuid: int, endp
         "--wallet.hotkey", hotkey,
         "--wallet.path", str(wallets_dir),
         "--subtensor.chain_endpoint", endpoint,
+        "--unsafe",
         "--no_prompt",
     ]
     log.info("btcli register: name=%s hotkey=%s", name, hotkey)
