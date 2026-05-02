@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+mnemonics.txt
+wallets/
+wallets.json
+*.log
+_reference_miner.py
+.claude/
+road.md

@@ -1,0 +1,8 @@
+# One mnemonic per line. 12/15/18/21/24 words. Lines starting with # are ignored.
+# Each line becomes one wallet: coldkey + hotkey both regenerated from the same seed.
+# Wallet names are auto-assigned: miner_0001, miner_0002, ... hotkey="default".
+# Ports are auto-assigned: AXON_PORT_BASE, AXON_PORT_BASE+1, ...
+#
+# example (do NOT use these):
+# abandon ability able about above absent absorb abstract absurd abuse access accident
+# ...
