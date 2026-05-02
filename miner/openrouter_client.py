@@ -85,13 +85,16 @@ class OpenRouterClient:
         self._x_title = x_title
         self._timeout_seconds = timeout_seconds
         self._concurrency = concurrency
-        self._semaphore: asyncio.Semaphore | None = None
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "OpenRouterClient":
+        # Concurrency cap is enforced by httpx's connection-pool (max_connections).
+        # We don't use an asyncio.Semaphore here because bittensor's axons run in
+        # separate event loops — a Semaphore bound to one loop can't be awaited
+        # from another.
         limits = httpx.Limits(
-            max_connections=max(self._concurrency * 2, 100),
-            max_keepalive_connections=max(self._concurrency, 50),
+            max_connections=self._concurrency,
+            max_keepalive_connections=max(self._concurrency // 2, 50),
         )
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -105,13 +108,6 @@ class OpenRouterClient:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
-
-    def _get_semaphore(self) -> asyncio.Semaphore:
-        # Lazily create the semaphore in the event loop that actually uses it
-        # (axon worker loop, not the startup loop).
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self._concurrency)
-        return self._semaphore
 
     def _headers(self) -> dict[str, str]:
         h = {
@@ -169,10 +165,8 @@ class OpenRouterClient:
             "response_format": {"type": "json_object"},
             "messages": messages,
         }
-        sem = self._get_semaphore()
         try:
-            async with sem:
-                resp = await self._client.post("/chat/completions", json=body)
+            resp = await self._client.post("/chat/completions", json=body)
             if resp.status_code >= 400:
                 log.warning("openrouter %s: %s", resp.status_code, resp.text[:300])
                 return _rule_based_candidate(ins, tag=f"temp={temperature:.1f}:http{resp.status_code}")
