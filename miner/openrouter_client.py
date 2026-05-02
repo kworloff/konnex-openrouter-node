@@ -269,7 +269,7 @@ def _parse_json_loose(raw: str) -> dict[str, typing.Any]:
 def client_from_env() -> OpenRouterClient:
     return OpenRouterClient(
         api_key=os.environ.get("OPENROUTER_API_KEY", "").strip(),
-        model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip(),
+        model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-5.4-mini").strip(),
         base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip(),
         http_referer=os.environ.get("OPENROUTER_HTTP_REFERER", "").strip(),
         x_title=os.environ.get("OPENROUTER_X_TITLE", "").strip(),

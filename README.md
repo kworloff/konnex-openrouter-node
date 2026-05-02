@@ -109,7 +109,7 @@ and is independent of your SSH session.
 
 | Env var | Default | Notes |
 |---|---|---|
-| `OPENROUTER_MODEL` | `openai/gpt-4o-mini` | Any OpenRouter slug |
+| `OPENROUTER_MODEL` | `openai/gpt-5.4-mini` | Any OpenRouter slug |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | |
 | `OPENROUTER_CONCURRENCY` | `200` | Global semaphore across all wallets |
 | `OPENROUTER_TIMEOUT_SECONDS` | `45` | Per HTTP request |

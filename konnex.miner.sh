@@ -10,7 +10,7 @@
 #   KONNEX_BRANCH            git branch (default: main)
 #   KONNEX_INSTALL_DIR       install dir (default: $HOME/konnex-miner)
 #   OPENROUTER_API_KEY       OpenRouter key (sk-or-...)
-#   OPENROUTER_MODEL         default openai/gpt-4o-mini
+#   OPENROUTER_MODEL         default openai/gpt-5.4-mini
 #   NETUID                   subnet id
 #   SUBTENSOR_CHAIN_ENDPOINT default wss://testnet-rpc1.konnex.world:39944
 #   EXTERNAL_IP              public IP of this VPS (auto-detected if blank)
@@ -43,7 +43,7 @@ print_banner
 : "${KONNEX_REPO_URL:=https://github.com/kworloff/konnex-openrouter-node.git}"
 : "${KONNEX_BRANCH:=main}"
 : "${KONNEX_INSTALL_DIR:=$HOME/konnex-miner}"
-: "${OPENROUTER_MODEL:=openai/gpt-4o-mini}"
+: "${OPENROUTER_MODEL:=openai/gpt-5.4-mini}"
 : "${SUBTENSOR_CHAIN_ENDPOINT:=wss://testnet-rpc1.konnex.world:39944}"
 : "${AXON_PORT_BASE:=8091}"
 : "${AUTO_BOOTSTRAP:=ask}"
