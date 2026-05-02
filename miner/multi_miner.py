@@ -65,6 +65,7 @@ class MultiWalletMiner:
         self.subtensor: typing.Any = None
         self.metagraph: typing.Any = None
         self.axons: list[typing.Any] = []
+        self._hotkey_to_name: dict[str, str] = {}
         self._stop = asyncio.Event()
 
     def _load_manifest(self) -> list[dict[str, typing.Any]]:
@@ -92,7 +93,24 @@ class MultiWalletMiner:
             except asyncio.TimeoutError:
                 pass
 
+    def _miner_label(self, synapse: DroneNavSynapse) -> str:
+        try:
+            hk = getattr(getattr(synapse, "axon", None), "hotkey", None) or "?"
+        except Exception:
+            hk = "?"
+        name = self._hotkey_to_name.get(hk, "")
+        return f"{name}({hk[:8]}…)" if name else f"({hk[:8]}…)"
+
+    def _validator_label(self, synapse: DroneNavSynapse) -> str:
+        try:
+            hk = getattr(getattr(synapse, "dendrite", None), "hotkey", None) or "?"
+        except Exception:
+            hk = "?"
+        return f"{hk[:8]}…"
+
     async def _forward(self, synapse: DroneNavSynapse) -> DroneNavSynapse:
+        miner_lbl = self._miner_label(synapse)
+        validator_lbl = self._validator_label(synapse)
         instruction = str(synapse.instruction or "").strip()
         if not instruction:
             synapse.miner_error = "empty instruction"
@@ -101,6 +119,8 @@ class MultiWalletMiner:
             synapse.miner_response_json = json.dumps(
                 {"ok": False, "error": "empty instruction"}, ensure_ascii=False
             )
+            log.info("DRONE_MINER miner=%s validator=%s task=%s EMPTY_INSTRUCTION",
+                     miner_lbl, validator_lbl, synapse.task_id)
             return synapse
         pack = await self.client.mine(
             instruction=instruction,
@@ -112,9 +132,12 @@ class MultiWalletMiner:
         synapse.miner_error = None
         synapse.miner_response_json = json.dumps(pack, ensure_ascii=False)
         log.info(
-            "DRONE_MINER task=%s action_id=%s conf=%.2f",
+            "DRONE_MINER miner=%s validator=%s task=%s action_id=%s (%s) conf=%.2f",
+            miner_lbl,
+            validator_lbl,
             synapse.task_id,
             synapse.action_id,
+            pack.get("label", "?"),
             float(synapse.confidence or 0.0),
         )
         return synapse
@@ -191,9 +214,9 @@ class MultiWalletMiner:
                 axon.serve(netuid=self.netuid, subtensor=self.subtensor)
                 axon.start()
                 self.axons.append(axon)
+                self._hotkey_to_name[hk_ss58] = name
                 served += 1
-                if served % 50 == 0:
-                    log.info("served %d axons so far", served)
+                log.info("axon UP: %s hotkey=%s port=%d", name, hk_ss58, port)
             except Exception as e:
                 log.error("axon start failed for %s on port %d: %s", hk_ss58, port, e)
 
