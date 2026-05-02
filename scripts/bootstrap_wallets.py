@@ -73,9 +73,15 @@ def _btcli_register(name: str, hotkey: str, wallets_dir: Path, netuid: int, endp
         log.error("btcli register timed out for %s/%s", name, hotkey)
         return False
     combined = (r.stdout or "") + "\n" + (r.stderr or "")
-    if "Custom error: 6" in combined or "AlreadyRegistered" in combined:
-        log.info("hotkey already registered on chain (custom error 6) — treating as success")
+    if "Custom error: 6" in combined:
+        # In Konnex's forked subtensor, "Custom error: 6" can mean either
+        # "already registered" or "cannot pay burn fee". Don't trust it —
+        # let the on-chain re-check decide.
+        log.warning("btcli returned 'Custom error: 6' — will verify via on-chain check")
         return True
+    if "Insufficient balance" in combined or "InsufficientBalance" in combined:
+        log.error("btcli register: insufficient balance on coldkey")
+        return False
     if r.returncode != 0:
         log.error("btcli register failed (rc=%d): %s", r.returncode, combined[-500:])
         return False
@@ -125,9 +131,14 @@ def main() -> None:
         if not already:
             ok = _btcli_register(name, hotkey, wallets_dir, netuid, endpoint)
             if ok:
-                # Recheck via chain
                 time.sleep(2)
                 registered = _is_registered(subtensor, netuid, ss58)
+                if not registered:
+                    log.error(
+                        "%s (%s): btcli reported success but on-chain check says not registered. "
+                        "Most likely the coldkey doesn't have enough TAO for burn-fee.",
+                        name, ss58,
+                    )
             time.sleep(register_delay)
         elif skip_if_registered:
             log.info("already registered: %s (%s)", name, ss58)
